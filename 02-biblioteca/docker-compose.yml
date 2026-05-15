@@ -1,0 +1,73 @@
+version: "3.9"
+
+# ---------------------------------------------------------------------------
+# Ejemplo 2 — Biblioteca San Carlos
+#  Dos servicios (books, loans) con UNA BD CADA UNO.
+#  La comunicacion entre servicios es por HTTP usando el nombre DNS del
+#  servicio destino dentro de la red de Compose.
+# ---------------------------------------------------------------------------
+
+services:
+
+  # --- Servicio: catalogo de libros ---------------------------------------
+  books:
+    build: ./books
+    ports:
+      - "8002:8000"
+    environment:
+      DB_URL: postgresql://app:secret@books_db:5432/books
+    depends_on:
+      books_db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  books_db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: books
+    volumes:
+      - books_pgdata:/var/lib/postgresql/data
+      - ./books/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d books"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # --- Servicio: prestamos -------------------------------------------------
+  loans:
+    build: ./loans
+    ports:
+      - "8003:8000"
+    environment:
+      DB_URL: postgresql://app:secret@loans_db:5432/loans
+      # OJO: aqui es donde decimos a 'loans' como hablar con 'books'.
+      # 'books' es el nombre del servicio en este mismo compose => DNS interno.
+      BOOKS_URL: http://books:8000
+    depends_on:
+      loans_db:
+        condition: service_healthy
+      books:
+        condition: service_started
+    restart: unless-stopped
+
+  loans_db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: loans
+    volumes:
+      - loans_pgdata:/var/lib/postgresql/data
+      - ./loans/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d loans"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  books_pgdata:
+  loans_pgdata:

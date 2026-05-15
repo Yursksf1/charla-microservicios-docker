@@ -1,0 +1,47 @@
+version: "3.9"
+
+# ---------------------------------------------------------------------------
+# Ejemplo 1 — Cafeteria El Buen Cafe
+#  - Un servicio FastAPI (menu) hablando con una BD Postgres (db).
+#  - Compose crea automaticamente una red privada llamada "01-cafeteria_default"
+#    donde los contenedores se resuelven por su nombre de servicio.
+# ---------------------------------------------------------------------------
+
+services:
+
+  menu:
+    build: ./menu
+    ports:
+      # host:contenedor — usamos 8001 en el host para no chocar con otros
+      # ejemplos si los corres en paralelo.
+      - "8001:8000"
+    environment:
+      # "db" es el nombre DNS del otro servicio. No hace falta saber su IP.
+      DB_URL: postgresql://cafe:secret@db:5432/cafeteria
+    depends_on:
+      db:
+        # No arrancamos la API hasta que Postgres responda a pg_isready.
+        # Sin esto, el primer intento de conectarse suele fallar.
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cafe
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: cafeteria
+    volumes:
+      # Volumen nombrado: los datos sobreviven a `docker compose down`.
+      - pgdata:/var/lib/postgresql/data
+      # Cualquier .sql que pongamos aqui se ejecuta SOLO la primera vez
+      # que se crea el volumen. Util para semilla de datos.
+      - ./menu/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cafe -d cafeteria"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pgdata:

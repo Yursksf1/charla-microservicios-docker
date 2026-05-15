@@ -1,0 +1,104 @@
+version: "3.9"
+
+# ---------------------------------------------------------------------------
+# Ejemplo 3 — Tienda online MiniMarket
+#  - products: API REST con su propia BD.
+#  - orders:   API REST con su propia BD; llama a products (sync) y publica
+#              eventos a RabbitMQ (async).
+#  - notifier: worker SIN puerto HTTP; consume eventos de RabbitMQ.
+#  - mq:       RabbitMQ con management UI (http://localhost:15672).
+# ---------------------------------------------------------------------------
+
+services:
+
+  # --- Catalogo de productos ----------------------------------------------
+  products:
+    build: ./products
+    ports:
+      - "8004:8000"
+    environment:
+      DB_URL: postgresql://app:secret@products_db:5432/products
+    depends_on:
+      products_db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  products_db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: products
+    volumes:
+      - products_pgdata:/var/lib/postgresql/data
+      - ./products/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d products"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # --- Pedidos ------------------------------------------------------------
+  orders:
+    build: ./orders
+    ports:
+      - "8005:8000"
+    environment:
+      DB_URL: postgresql://app:secret@orders_db:5432/orders
+      PRODUCTS_URL: http://products:8000
+      # amqp:// es el protocolo de RabbitMQ.
+      MQ_URL: amqp://admin:admin@mq:5672/
+    depends_on:
+      orders_db:
+        condition: service_healthy
+      mq:
+        condition: service_healthy
+      products:
+        condition: service_started
+    restart: unless-stopped
+
+  orders_db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: orders
+    volumes:
+      - orders_pgdata:/var/lib/postgresql/data
+      - ./orders/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d orders"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # --- Worker de notificaciones -------------------------------------------
+  # OJO: no tiene `ports`. No expone HTTP. Solo consume de la cola.
+  notifier:
+    build: ./notifier
+    environment:
+      MQ_URL: amqp://admin:admin@mq:5672/
+    depends_on:
+      mq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # --- Broker -------------------------------------------------------------
+  mq:
+    image: rabbitmq:3.13-management
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+    ports:
+      - "15672:15672"   # UI de administracion
+    healthcheck:
+      # rabbitmq-diagnostics solo devuelve OK cuando el broker esta listo
+      # para aceptar conexiones — mas fiable que un simple `tcp`.
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  products_pgdata:
+  orders_pgdata:
