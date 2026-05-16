@@ -1,0 +1,109 @@
+# OpenAPI 3.0 contract for Orders service
+openapi: 3.0.0
+info:
+	title: MiniMarket Orders API
+	version: 1.0.0
+paths:
+	/healthz:
+		get:
+			summary: Health check
+			responses:
+				'200':
+					description: Service is healthy
+					content:
+						application/json:
+							schema:
+								type: object
+								properties:
+									status:
+										type: string
+										example: ok
+	/orders:
+		post:
+			summary: Create a new order
+			requestBody:
+				required: true
+				content:
+					application/json:
+						schema:
+							$ref: '#/components/schemas/OrderIn'
+			responses:
+				'201':
+					description: Order created
+					content:
+						application/json:
+							schema:
+								$ref: '#/components/schemas/OrderOut'
+				'404':
+					description: Product not found
+				'502':
+					description: Products service error
+				'503':
+					description: Products service unavailable
+		get:
+			summary: List all orders
+			responses:
+				'200':
+					description: List of orders
+					content:
+						application/json:
+							schema:
+								type: array
+								items:
+									$ref: '#/components/schemas/OrderOut'
+components:
+	schemas:
+		ItemIn:
+			type: object
+			properties:
+				product_id:
+					type: integer
+					minimum: 1
+				qty:
+					type: integer
+					minimum: 1
+			required: [product_id, qty]
+		OrderIn:
+			type: object
+			properties:
+				customer_email:
+					type: string
+					format: email
+				items:
+					type: array
+					minItems: 1
+					items:
+						$ref: '#/components/schemas/ItemIn'
+			required: [customer_email, items]
+		OrderOut:
+			type: object
+			properties:
+				id:
+					type: integer
+				customer_email:
+					type: string
+				total:
+					type: number
+					format: float
+				created_at:
+					type: string
+					format: date-time
+				items:
+					type: array
+					items:
+						type: object
+						properties:
+							product_id:
+								type: integer
+							name:
+								type: string
+							unit_price:
+								type: number
+								format: float
+							qty:
+								type: integer
+							subtotal:
+								type: number
+								format: float
+						required: [product_id, name, unit_price, qty, subtotal]
+			required: [id, customer_email, total, created_at, items]

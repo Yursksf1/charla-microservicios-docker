@@ -1,0 +1,95 @@
+# OpenAPI 3.0 contract for Products service
+openapi: 3.0.0
+info:
+	title: MiniMarket Products API
+	version: 1.0.0
+paths:
+	/healthz:
+		get:
+			summary: Health check
+			responses:
+				'200':
+					description: Service is healthy
+					content:
+						application/json:
+							schema:
+								type: object
+								properties:
+									status:
+										type: string
+										example: ok
+	/products:
+		get:
+			summary: List all products
+			responses:
+				'200':
+					description: List of products
+					content:
+						application/json:
+							schema:
+								type: array
+								items:
+									$ref: '#/components/schemas/Product'
+		post:
+			summary: Create a new product
+			requestBody:
+				required: true
+				content:
+					application/json:
+						schema:
+							$ref: '#/components/schemas/ProductIn'
+			responses:
+				'201':
+					description: Product created
+					content:
+						application/json:
+							schema:
+								$ref: '#/components/schemas/Product'
+	/products/{id}:
+		get:
+			summary: Get product by ID
+			parameters:
+				- in: path
+					name: id
+					schema:
+						type: integer
+					required: true
+					description: Product ID
+			responses:
+				'200':
+					description: Product found
+					content:
+						application/json:
+							schema:
+								$ref: '#/components/schemas/Product'
+				'404':
+					description: Product not found
+components:
+	schemas:
+		ProductIn:
+			type: object
+			properties:
+				sku:
+					type: string
+					minLength: 1
+					maxLength: 40
+				name:
+					type: string
+					minLength: 1
+					maxLength: 120
+				price:
+					type: number
+					format: float
+					minimum: 0
+				stock:
+					type: integer
+					minimum: 0
+			required: [sku, name, price, stock]
+		Product:
+			allOf:
+				- $ref: '#/components/schemas/ProductIn'
+				- type: object
+					properties:
+						id:
+							type: integer
+					required: [id]
